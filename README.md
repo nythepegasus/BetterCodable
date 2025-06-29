@@ -1,5 +1,5 @@
 # BetterDecodable
-A "garbage" `Decodable` utility to make parsing JSON `String`s easier.
+A "garbage" `Encodable`/`Decodable` utility to make serializing JSON/plist `Data` easier.
 
 Example:
 ```swift
