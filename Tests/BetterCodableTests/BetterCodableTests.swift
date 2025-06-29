@@ -2,9 +2,19 @@ import Testing
 import Foundation
 @testable import BetterCodable
 
+// Helpers
 
-let validJSON = "{\"name\":\"ny :3\",\"points\":84}".data(using: .utf8)!
-let invalidJSON = "{\"name\":\"ny :3\"// missing points}".data(using: .utf8)!
+extension String {
+    func Data(using: String.Encoding = .utf8) -> Data { data(using: using)! }
+}
+
+extension URL {
+    func delete() throws { try FileManager.default.removeItem(at: self) }
+}
+
+
+let validJSON = "{\"name\":\"ny :3\",\"points\":84}".Data()
+let invalidJSON = "{\"name\":\"ny :3\"// missing points}".Data()
 
 let validPlist = """
 <dict>
@@ -13,7 +23,7 @@ let validPlist = """
         <key>name</key>
         <string>ny :3</string>
 </dict>
-""".data(using: .utf8)!
+""".Data()
 
 let invalidPlist = """
 <plist version="1.1">
@@ -24,7 +34,7 @@ let invalidPlist = """
         <string>ny :3
 </dict>
 </plist>
-""".data(using: .utf8)!
+""".Data()
 
 
 public struct TestModel: JSONCodable, PlistCodable, Sendable, Equatable {
@@ -89,3 +99,36 @@ struct PlistEncodableExtensionTests {
         #expect(p != nil)
     }
 }
+
+@Suite("File access", .serialized)
+struct FileCodableExtensionTests {
+    let jsonpath = URL(fileURLWithPath: "test.json")
+    let plistpath = URL(fileURLWithPath: "test.plist")
+
+    @Test("JSON save")
+    func saveJSON() throws {
+        #expect(t.write(json: jsonpath))
+    }
+
+    @Test("JSON read")
+    func readJSON() throws {
+        let r = try? TestModel(jsonPath: jsonpath)
+        try? jsonpath.delete()
+        #expect(r != nil)
+        #expect(r == t)
+    }
+
+    @Test("plist save")
+    func savePlist() throws {
+        #expect(t.write(plist: plistpath))
+    }
+
+    @Test("Plist read")
+    func readPlist() throws {
+        let r = try? TestModel(plistPath: plistpath)
+        try? plistpath.delete()
+        #expect(r != nil)
+        #expect(r == t)
+    }
+}
+

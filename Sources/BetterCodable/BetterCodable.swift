@@ -42,3 +42,45 @@ public extension PlistEncodable {
 
 public protocol PlistCodable: Codable, PlistEncodable & PlistDecodable {}
 
+#if BCFileHelper
+
+public extension JSONDecodable {
+    init(jsonPath path: URL) throws {
+        guard let data = FileManager.default.contents(atPath: path.path) else { throw BCFileError.missing }
+        self = try Self.init(json: data)
+    }
+}
+
+public extension JSONEncodable {
+    func write(json path: URL) -> Bool {
+        guard let data = try? json else { return false }
+        do {
+            try data.write(to: path)
+            return true
+        } catch { return false }
+    }
+}
+
+public extension PlistDecodable {
+    init(plistPath path: URL) throws {
+        guard let data = FileManager.default.contents(atPath: path.path) else { throw BCFileError.missing }
+        self = try Self.init(plist: data)
+    }
+}
+
+public extension PlistEncodable {
+    func write(plist path: URL) -> Bool {
+        guard let data = try? plist else { return false }
+        do {
+            try data.write(to: path)
+            return true
+        } catch { return false }
+    }
+}
+
+enum BCFileError: Error {
+    case missing
+}
+
+#endif
+
