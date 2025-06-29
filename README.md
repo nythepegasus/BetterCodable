@@ -1,4 +1,4 @@
-# NYDecodable
+# BetterDecodable
 A "garbage" `Decodable` utility to make parsing JSON `String`s easier.
 
 Example:
@@ -11,25 +11,27 @@ struct User: Decodable {
   var age: UInt8
 }
 
-let data = "{'name': 'ny', 'age': 84}".data(using: .utf8)
+let data = "{'name': 'ny', 'age': 84}".data(using: .utf8)!
 
-let u = JSONDecoder().decode(User.self, data)
+let u = JSONDecoder().decode(User.self, from: data)
 ```
 
 ```swift
 // NEW
 
-import NYDecodable
+import BetterCodable
 
-struct User: NYDecodable {
+struct User: JSONDecodable {
+  static let jsonDecoder = JSONDecoder()
+
   var name: String
   var age: UInt8
 }
 
-let data = "{'name': 'ny', 'age': 84}".data(using: .utf8)
+let data = "{'name': 'ny', 'age': 84}".data(using: .utf8)!
 
-let u = User(json: data)
+let u = try User(json: data)
 ```
 
 
-This is just a basic example, and this package also provides some error handler protocols in `NYDecodableErrorLoggers`.
+This is just a basic example, and this package provides similar for the corresponding plist types.

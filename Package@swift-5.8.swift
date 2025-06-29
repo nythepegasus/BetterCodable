@@ -3,14 +3,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "NYDecodable",
+    name: "BetterCodable",
     products: [
-        .library(name: "NYDecodable", targets: ["NYDecodable"]),
+        .library(name: "BetterCodable", targets: ["BetterCodable"]),
     ],
     targets: [
-        .target(name: "NYDecodable"),
-        .testTarget(name: "NYDecodableTests",
-                    dependencies: ["NYDecodable"]
-        ),
+        .target(name: "BetterCodable"),
+        .testTarget(name: "BetterCodableTests", dependencies: ["BetterCodable"]),
     ]
 )
