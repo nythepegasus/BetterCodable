@@ -2,133 +2,177 @@ import Testing
 import Foundation
 @testable import BetterCodable
 
-// Helpers
-
-extension String {
-    func Data(using: String.Encoding = .utf8) -> Data { data(using: using)! }
-}
+// MARK: Setup Helpers
 
 extension URL {
     func delete() throws { try FileManager.default.removeItem(at: self) }
 }
 
-
-let validJSON = "{\"name\":\"ny :3\",\"points\":84}".Data()
-let invalidJSON = "{\"name\":\"ny :3\"// missing points}".Data()
-
-let validPlist = """
-<dict>
-        <key>points</key>
-        <integer>84</integer>
-        <key>name</key>
-        <string>ny :3</string>
-</dict>
-""".Data()
+let invalidJSON = "{\"name\":\"ny :3\"// missing points}".data(using: .utf8)!
+let validJSON = "{\"name\":\"ny :3\",\"points\":84}".data(using: .utf8)!
+let validArrayJSON = "[{\"name\":\"ny :3\",\"points\":84},{\"name\":\"Gracie\",\"points\":16}]".data(using: .utf8)!
 
 let invalidPlist = """
 <plist version="1.1">
 <dict>
-        <key>points</key>
-        <integer>84</integer>
-        <key>name</key>
-        <string>ny :3
+    <key>points</key>
+    <integer>84</integer>
+    <key>name</key>
+    <string>ny :3
 </dict>
 </plist>
-""".Data()
+""".data(using: .utf8)!
 
+let validPlist = """
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>points</key>
+    <integer>84</integer>
+    <key>name</key>
+    <string>ny :3</string>
+</dict>
+</plist>
+""".data(using: .utf8)!
 
-public struct TestModel: JSONCodable, PlistCodable, Sendable, Equatable {
-    // JSON
+let validArrayPlist = """
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+<dict>
+    <key>name</key>
+    <string>ny :3</string>
+    <key>points</key>
+    <integer>84</integer>
+</dict>
+<dict>
+    <key>name</key>
+    <string>Gracie</string>
+    <key>points</key>
+    <integer>16</integer>
+</dict>
+</array>
+</plist>
+""".data(using: .utf8)!
+
+public struct TestModel: Sendable, Equatable {
+    let name: String
+    let points: Int
+
+    static var single: Self { .init(name: "ny :3", points: 84) }
+    static var multiple: [Self] { [.init(name: "ny :3", points: 84), .init(name: "Gracie", points: 16)] }
+}
+
+extension TestModel: JSONCodable {
     public static let jsonEncoder = JSONEncoder()
     public static let jsonDecoder = JSONDecoder()
+}
 
-    // plist
+extension TestModel: PlistCodable {
     public static let plistEncoder = {
-        var enc = PropertyListEncoder()
+        let enc = PropertyListEncoder()
         enc.outputFormat = .xml
         return enc
     }()
     public static let plistDecoder = PropertyListDecoder()
-    
-    let name: String
-    let points: Int
 }
 
-let t = TestModel(name: "ny :3", points: 84)
+// MARK: Tests
 
-@Suite("Decodable JSON Parsing")
-struct JSONDecodableExtensionTests {
+@Suite("Decodable Parsing")
+struct DecodableExtensionTests {
+    // JSON
     @Test("Init with valid JSON")
-    func initWithValidJSON() throws {
-        #expect(try TestModel(json: validJSON) == t)
-    }
+    func initWithValidJSON() throws { #expect(try TestModel(json: validJSON) == .single) }
+
+    @Test("Init with valid JSON Array")
+    func initWithValidJSONArray() throws { #expect(try [TestModel](json: validArrayJSON) == TestModel.multiple) }
 
     @Test("Init with invalid JSON")
-    func initWithInvalidJSON() throws {
-        #expect(throws: DecodingError.self) { try TestModel(json: invalidJSON) }
-    }
-}
+    func initWithInvalidJSON() throws { #expect(throws: DecodingError.self) { try TestModel(json: invalidJSON) } }
 
-@Suite("Encodable JSON")
-struct JSONEncodableExtensionTests {
-    @Test("JSONEncodable type returns Data")
-    func JSONEncodableReturnsData() throws {
-        let j = try? t.json
-        #expect(j != nil)
-    }
-}
+    // plist
 
-@Suite("Decodable Plist Parsing")
-struct PlistDecodableExtensionTests {
     @Test("Init with valid plist")
-    func initWithValidJSON() throws {
-        #expect(try TestModel(plist: validPlist) == t)
-    }
+    func initWithValidPlist() throws { #expect(try TestModel(plist: validPlist) == .single) }
+
+    @Test("Init with valid plist Array")
+    func initWithValidPlistArray() throws { #expect(try [TestModel](plist: validArrayPlist) == TestModel.multiple) }
 
     @Test("Init with invalid plist")
-    func initWithInvalidJSON() throws {
-        #expect(throws: DecodingError.self) { try TestModel(plist: invalidPlist) }
-    }
+    func initWithInvalidPlist() throws { #expect(throws: DecodingError.self) { try TestModel(plist: invalidPlist) } }
 }
 
-@Suite("Encodable Plist")
-struct PlistEncodableExtensionTests {
+@Suite("Encodable Serializing")
+struct EncodableExtensionTests {
+    @Test("JSONEncodable type returns Data")
+    func JSONEncodableReturnsData() throws { #expect(throws: Never.self) { try TestModel.single.json } }
+
     @Test("PlistEncodable type returns Data")
-    func PlistEncodableReturnsData() {
-        let p = try? t.plist
-        #expect(p != nil)
-    }
+    func PlistEncodableReturnsData() { #expect(throws: Never.self) { try TestModel.single.plist } }
+
+    @Test("JSONEncodable Array type returns Data")
+    func JSONArrayEncodableReturnsData() throws { #expect(throws: Never.self) { try TestModel.multiple.json } }
+
+    @Test("PlistEncodable Array type returns Data")
+    func PlistArrayEncodableReturnsData() { #expect(throws: Never.self) { try TestModel.multiple.plist } }
 }
 
-@Suite("File access", .serialized)
+@Suite("File Access", .serialized)
 struct FileCodableExtensionTests {
-    let jsonpath = URL(fileURLWithPath: "test.json")
-    let plistpath = URL(fileURLWithPath: "test.plist")
+    static let datapath = URL(fileURLWithPath: "test.dat")
 
-    @Test("JSON save")
-    func saveJSON() throws {
-        #expect(t.write(json: jsonpath))
+    @Suite("File JSON Access")
+    struct FileJSONCodableExtensionTests {
+        @Test("JSON save")
+        func saveJSON() throws { #expect(throws: Never.self) { try TestModel.single.write(json: datapath) } }
+
+        @Test("JSON read")
+        func readJSON() throws {
+            let r = try? TestModel(jsonPath: datapath)
+            try? datapath.delete()
+            #expect(r != nil && r == .single)
+        }
     }
 
-    @Test("JSON read")
-    func readJSON() throws {
-        let r = try? TestModel(jsonPath: jsonpath)
-        try? jsonpath.delete()
-        #expect(r != nil)
-        #expect(r == t)
+    @Suite("File JSON Array Access")
+    struct FileJSONArrayCodableExtensionTests {
+        @Test("JSON Array save")
+        func saveArrayJSON() throws { #expect(throws: Never.self) { try TestModel.multiple.write(json: datapath) } }
+
+        @Test("JSON Array read")
+        func readArrayJSON() throws {
+            let r = try? [TestModel](jsonPath: datapath)
+            try? datapath.delete()
+            #expect(r != nil && r == TestModel.multiple)
+        }
     }
 
-    @Test("plist save")
-    func savePlist() throws {
-        #expect(t.write(plist: plistpath))
+    @Suite("File Plist Access")
+    struct FilePlistCodableExtensionTests {
+        @Test("plist save")
+        func savePlist() throws { #expect(throws: Never.self) { try TestModel.single.write(plist: datapath) } }
+
+        @Test("plist read")
+        func readPlist() throws {
+            let r = try? TestModel(plistPath: datapath)
+            try? datapath.delete()
+            #expect(r != nil && r == .single)
+        }
     }
 
-    @Test("Plist read")
-    func readPlist() throws {
-        let r = try? TestModel(plistPath: plistpath)
-        try? plistpath.delete()
-        #expect(r != nil)
-        #expect(r == t)
+    @Suite("File Plist Array Access")
+    struct FilePlistArrayCodableExtensionTests {
+        @Test("plist Array save")
+        func saveArrayPlist() throws { #expect(throws: Never.self) { try TestModel.multiple.write(plist: datapath) } }
+
+        @Test("plist Array read")
+        func readArrayPlist() throws {
+            let r = try? [TestModel](plistPath: datapath)
+            try? datapath.delete()
+            #expect(r != nil && r == TestModel.multiple)
+        }
     }
 }
-
