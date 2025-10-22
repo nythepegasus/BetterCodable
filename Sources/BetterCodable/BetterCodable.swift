@@ -64,6 +64,15 @@ public protocol PlistEncodable: Encodable {
     static var plistEncoder: PropertyListEncoder { get }
 }
 
+// MARK: Codable protocols for JSON and plist Data
+
+/// Protocol for adding helpers to Encodable for JSON and plist Data.
+public protocol JPEncodable: JSONEncodable & PlistEncodable {}
+/// Protocol for adding helpers to Decodable for JSON and plist Data.
+public protocol JPDecodable: JSONDecodable & PlistDecodable {}
+/// Protocol for adding helpers to Codable for JSON and plist Data.
+public protocol JPCodable: JPEncodable & JPDecodable {}
+
 public extension PlistEncodable {
     /// The current object as Data returned by this type's default PropertyListEncoder.
     var plist: Data { get throws { try Self.plistEncoder.encode(self) } }

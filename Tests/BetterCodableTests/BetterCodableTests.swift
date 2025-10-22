@@ -65,12 +65,9 @@ public struct TestModel: Sendable, Equatable {
     static var multiple: [Self] { [.init(name: "ny :3", points: 84), .init(name: "Gracie", points: 16)] }
 }
 
-extension TestModel: JSONCodable {
+extension TestModel: JPCodable {
     public static let jsonEncoder = JSONEncoder()
     public static let jsonDecoder = JSONDecoder()
-}
-
-extension TestModel: PlistCodable {
     public static let plistEncoder = {
         let enc = PropertyListEncoder()
         enc.outputFormat = .xml
