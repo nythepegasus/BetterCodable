@@ -1,5 +1,4 @@
 import Testing
-import Foundation
 @testable import BetterCodable
 
 // MARK: Setup Helpers

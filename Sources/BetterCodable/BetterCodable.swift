@@ -1,5 +1,5 @@
 
-import Foundation
+@_exported import Foundation
 
 
 // MARK: Codable Data JSON extensions
