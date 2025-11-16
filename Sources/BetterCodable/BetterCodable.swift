@@ -1,5 +1,9 @@
 
-@_exported import Foundation
+@_exported import struct Foundation.Data
+@_exported import class Foundation.JSONDecoder
+@_exported import class Foundation.JSONEncoder
+@_exported import class Foundation.PropertyListDecoder
+@_exported import class Foundation.PropertyListEncoder
 
 
 // MARK: Codable Data JSON extensions
@@ -87,6 +91,9 @@ public extension Array where Element: PlistEncodable {
 public protocol PlistCodable: Codable, PlistEncodable & PlistDecodable {}
 
 #if BCFileHelper
+
+@_exported import struct Foundation.URL
+@_exported import class Foundation.FileManager
 
 public extension JSONDecodable {
     /// Read Data from URL jsonPath and attempt to decode using type's default JSONDecoder.
