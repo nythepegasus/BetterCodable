@@ -1,62 +1,74 @@
 import Testing
 @testable import BetterCodable
 
-// MARK: Setup Helpers
+public enum BasicJSONDecoders: CaseIterable, BCJSONDecoderProvider {
+    case base
+    case json5
 
-extension URL {
-    func delete() throws { try FileManager.default.removeItem(at: self) }
+    public var jsonDecoder: JSONDecoder {
+        let dec = JSONDecoder()
+        switch self {
+            case .base: return dec
+            case .json5:
+            dec.allowsJSON5 = true
+        }
+        return dec
+    }
 }
 
-let invalidJSON = "{\"name\":\"ny :3\"// missing points}".data(using: .utf8)!
-let validJSON = "{\"name\":\"ny :3\",\"points\":84}".data(using: .utf8)!
-let validArrayJSON = "[{\"name\":\"ny :3\",\"points\":84},{\"name\":\"Gracie\",\"points\":16}]".data(using: .utf8)!
+public enum BasicJSONEncoders: CaseIterable, BCJSONEncoderProvider {
+    case base
+    case pretty
 
-let invalidPlist = """
-<plist version="1.1">
-<dict>
-    <key>points</key>
-    <integer>84</integer>
-    <key>name</key>
-    <string>ny :3
-</dict>
-</plist>
-""".data(using: .utf8)!
+    public var jsonEncoder: JSONEncoder {
+        let enc = JSONEncoder()
+        switch self {
+            case .base: 
+            return enc
+            case .pretty:
+            enc.outputFormatting = .prettyPrinted
+        }
+        return enc
+    }
+}
 
-let validPlist = """
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>points</key>
-    <integer>84</integer>
-    <key>name</key>
-    <string>ny :3</string>
-</dict>
-</plist>
-""".data(using: .utf8)!
+public enum BasicPlistDecoders: CaseIterable, BCPlistDecoderProvider {
+    case base
 
-let validArrayPlist = """
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<array>
-<dict>
-    <key>name</key>
-    <string>ny :3</string>
-    <key>points</key>
-    <integer>84</integer>
-</dict>
-<dict>
-    <key>name</key>
-    <string>Gracie</string>
-    <key>points</key>
-    <integer>16</integer>
-</dict>
-</array>
-</plist>
-""".data(using: .utf8)!
+    public var plistDecoder: PropertyListDecoder { .init() }
+}
 
-public struct TestModel: Sendable, Equatable {
+public enum BasicPlistEncoders: CaseIterable, BCPlistEncoderProvider {
+    case bin
+    case xml
+
+    public var plistEncoder: PropertyListEncoder {
+        let enc = PropertyListEncoder()
+        switch self {
+            case .bin:
+            enc.outputFormat = .binary
+            case .xml:
+            enc.outputFormat = .xml
+        }
+        return enc
+    }
+}
+
+// Example set up of setting your own default Encoders/Decoders for the types
+
+extension BCDCodable {
+    public typealias JSONDecoders = BasicJSONDecoders
+    public typealias JSONEncoders = BasicJSONEncoders
+    public static var jsonDefaultDecoder: any BCJSONDecoderProtocol { JSONDecoder() }
+    public static var jsonDefaultEncoder: any BCJSONEncoderProtocol { JSONEncoder() }
+    public typealias PlistDecoders = BasicPlistDecoders
+    public typealias PlistEncoders = BasicPlistEncoders
+    public static var plistDefaultDecoder: any BCPlistDecoderProtocol { PropertyListDecoder() }
+    public static var plistDefaultEncoder: any BCPlistEncoderProtocol { PropertyListEncoder() }
+}
+
+/// Simple TestModel to test encoding/decoding test data
+public struct TestModel: Codable, Equatable, Sendable {
     let name: String
     let points: Int
 
@@ -64,111 +76,267 @@ public struct TestModel: Sendable, Equatable {
     static var multiple: [Self] { [.init(name: "ny :3", points: 84), .init(name: "Gracie", points: 16)] }
 }
 
-extension TestModel: JPCodable {
-    public static let jsonEncoder = JSONEncoder()
-    public static let jsonDecoder = JSONDecoder()
-    public static let plistEncoder = {
-        let enc = PropertyListEncoder()
-        enc.outputFormat = .xml
-        return enc
-    }()
-    public static let plistDecoder = PropertyListDecoder()
+// Using the default Encoders/Decoders defined above
+extension TestModel: BCDCodable {}
+
+@Suite("BCJSONDecodable Parsing")
+struct BCJSONDecodaleTests {
+    @Test("BCJSONDecoderProvider valid JSON")
+    func initUsingProviderWithValidJSON() throws {
+        #expect(try TestModel(json: validJSON, using: .base) == .single)
+    }
+
+    @Test("BCJSONDecoderProvider valid JSON Array")
+    func initUsingProviderWithValidJSONArray() throws {
+        #expect(try [TestModel](json: validJSONArray, using: .base) == TestModel.multiple)
+    }
+
+    @Test("BCDefaultJSONDecoderProvider valid JSON Array")
+    func initUsingDefaultWithValidJSONArray() throws {
+        #expect(try [TestModel](json: validJSONArray) == TestModel.multiple)
+    }
+
+    @Test("BCJSONDecoderProvider valid JSON5")
+    func initUsingProviderWithValidJSON5() throws {
+        #expect(try TestModel(json: validJSON5, using: .json5) == .single)
+    }
+
+    @Test("BCJSONDecoderProvider valid JSON5 Array")
+    func initUsingProviderWithValidJSON5Array() throws {
+        #expect(try [TestModel](json: validJSON5Array, using: .json5) == TestModel.multiple)
+    }
+
+    @Test("BCDefaultJSONDecoder valid JSON")
+    func initUsingDefaultWithValidJSON() throws {
+        #expect(try TestModel(json: validJSON) == .single)
+    }
+
+    @Test("BCDefaultJSONDecoder valid JSON5")
+    func initUsingDefaultWithValidJSON5() throws {
+        #expect(throws: DecodingError.self) { try TestModel(json: validJSON5) }
+    }
+
+    @Test("BCJSONDecoderProvider invalid JSON")
+    func initUsingProviderWithInvalidJSON() throws {
+        #expect(throws: DecodingError.self) { try TestModel(json: invalidJSON, using: .base) }
+    }
+
+    @Test("BCDefaultJSONDecoder invalid JSON")
+    func initUsingDefaultWithInvalidJSON() throws {
+        #expect(throws: DecodingError.self) { try TestModel(json: invalidJSON) }
+    }
 }
 
-// MARK: Tests
-
-@Suite("Decodable Parsing")
-struct DecodableExtensionTests {
-    // JSON
-    @Test("Init with valid JSON")
-    func initWithValidJSON() throws { #expect(try TestModel(json: validJSON) == .single) }
-
-    @Test("Init with valid JSON Array")
-    func initWithValidJSONArray() throws { #expect(try [TestModel](json: validArrayJSON) == TestModel.multiple) }
-
-    @Test("Init with invalid JSON")
-    func initWithInvalidJSON() throws { #expect(throws: DecodingError.self) { try TestModel(json: invalidJSON) } }
-
-    // plist
-
-    @Test("Init with valid plist")
-    func initWithValidPlist() throws { #expect(try TestModel(plist: validPlist) == .single) }
-
-    @Test("Init with valid plist Array")
-    func initWithValidPlistArray() throws { #expect(try [TestModel](plist: validArrayPlist) == TestModel.multiple) }
-
-    @Test("Init with invalid plist")
-    func initWithInvalidPlist() throws { #expect(throws: DecodingError.self) { try TestModel(plist: invalidPlist) } }
-}
-
-@Suite("Encodable Serializing")
-struct EncodableExtensionTests {
-    @Test("JSONEncodable type returns Data")
-    func JSONEncodableReturnsData() throws { #expect(throws: Never.self) { try TestModel.single.json } }
-
-    @Test("PlistEncodable type returns Data")
-    func PlistEncodableReturnsData() { #expect(throws: Never.self) { try TestModel.single.plist } }
-
-    @Test("JSONEncodable Array type returns Data")
-    func JSONArrayEncodableReturnsData() throws { #expect(throws: Never.self) { try TestModel.multiple.json } }
-
-    @Test("PlistEncodable Array type returns Data")
-    func PlistArrayEncodableReturnsData() { #expect(throws: Never.self) { try TestModel.multiple.plist } }
-}
-
-@Suite("File Access", .serialized)
-struct FileCodableExtensionTests {
-    static let datapath = URL(fileURLWithPath: "test.dat")
-
-    @Suite("File JSON Access")
-    struct FileJSONCodableExtensionTests {
-        @Test("JSON save")
-        func saveJSON() throws { #expect(throws: Never.self) { try TestModel.single.write(json: datapath) } }
-
-        @Test("JSON read")
-        func readJSON() throws {
-            let r = try? TestModel(jsonPath: datapath)
-            try? datapath.delete()
-            #expect(r != nil && r == .single)
+@Suite("BCJSONEncodable Serializing")
+struct BCJSONEncodaleTests {
+    @Test("BCJSONEncodable returns Data")
+    func BCJSONEncodableReturnsData() throws {
+        BasicJSONEncoders.allCases.forEach { using in
+            #expect(throws: Never.self) { 
+                try TestModel.single.json(using)
+            }
         }
     }
 
-    @Suite("File JSON Array Access")
-    struct FileJSONArrayCodableExtensionTests {
-        @Test("JSON Array save")
-        func saveArrayJSON() throws { #expect(throws: Never.self) { try TestModel.multiple.write(json: datapath) } }
-
-        @Test("JSON Array read")
-        func readArrayJSON() throws {
-            let r = try? [TestModel](jsonPath: datapath)
-            try? datapath.delete()
-            #expect(r != nil && r == TestModel.multiple)
+    @Test("BCJSONEncodable Array returns Data")
+    func BCJSONEncodableArrayReturnsData() throws {
+        BasicJSONEncoders.allCases.forEach { using in
+            #expect(throws: Never.self) {
+                try TestModel.multiple.json(using)
+            }
         }
     }
 
-    @Suite("File Plist Access")
-    struct FilePlistCodableExtensionTests {
-        @Test("plist save")
-        func savePlist() throws { #expect(throws: Never.self) { try TestModel.single.write(plist: datapath) } }
+    @Test("BCJSONEncodable Default returns Data")
+    func BCJSONEncodableDefaultReturnsData() throws {
+        #expect(throws: Never.self) { try TestModel.single.json }
+    }
 
-        @Test("plist read")
-        func readPlist() throws {
-            let r = try? TestModel(plistPath: datapath)
-            try? datapath.delete()
-            #expect(r != nil && r == .single)
+    @Test("BCJSONEncodable Array Default returns Data")
+    func BCJSONEncodableArrayDefaultReturnsData() throws {
+        #expect(throws: Never.self) { try TestModel.multiple.json }
+    }
+}
+
+@Suite("BCPlistDecodable Parsing")
+struct BCPlistDecodaleTests {
+    @Test("BCPlistDecoderProvider valid Plist")
+    func initUsingProviderWithValidPlist() throws {
+        #expect(try TestModel(plist: validPlist, using: .base) == .single)
+    }
+
+    @Test("BCPlistDecoderProvider valid Plist Array")
+    func initUsingProviderWithValidPlistArray() throws {
+        #expect(try [TestModel](plist: validPlistArray, using: .base) == TestModel.multiple)
+    }
+
+    @Test("BCDefaultPlistDecoderProvider valid Plist Array")
+    func initUsingDefaultWithValidPlistArray() throws {
+        #expect(try [TestModel](plist: validPlistArray) == TestModel.multiple)
+    }
+    
+    @Test("BCDefaultPlistDecoder valid Plist")
+    func initUsingDefaultWithValidPlist() throws {
+        #expect(try TestModel(plist: validPlist) == .single)
+    }
+
+    @Test("BCPlistDecoderProvider invalid Plist")
+    func initUsingProviderWithInvalidPlist() throws {
+        #expect(throws: DecodingError.self) { try TestModel(plist: invalidPlist, using: .base) }
+    }
+
+    @Test("BCDefaultPlistDecoder invalid Plist")
+    func initUsingDefaultWithInvalidPlist() throws {
+        #expect(throws: DecodingError.self) { try TestModel(plist: invalidPlist) }
+    }
+}
+
+@Suite("BCPlistEncodable Serializing")
+struct BCPlistEncodaleTests {
+    @Test("BCPlistEncodable returns Data")
+    func BCPlistEncodableReturnsData() throws {
+        BasicPlistEncoders.allCases.forEach { using in
+            #expect(throws: Never.self) { 
+                try TestModel.single.plist(using)
+            }
         }
     }
 
-    @Suite("File Plist Array Access")
-    struct FilePlistArrayCodableExtensionTests {
-        @Test("plist Array save")
-        func saveArrayPlist() throws { #expect(throws: Never.self) { try TestModel.multiple.write(plist: datapath) } }
+    @Test("BCPlistEncodable Array returns Data")
+    func BCPlistEncodableArrayReturnsData() throws {
+        BasicPlistEncoders.allCases.forEach { using in
+            #expect(throws: Never.self) {
+                try TestModel.multiple.plist(using)
+            }
+        }
+    }
 
-        @Test("plist Array read")
-        func readArrayPlist() throws {
-            let r = try? [TestModel](plistPath: datapath)
-            try? datapath.delete()
-            #expect(r != nil && r == TestModel.multiple)
+    @Test("BCPlistEncodable Default returns Data")
+    func BCPlistEncodableDefaultReturnsData() throws {
+        #expect(throws: Never.self) { try TestModel.single.plist }
+    }
+
+    @Test("BCPlistEncodable Array Default returns Data")
+    func BCPlistEncodableArrayDefaultReturnsData() throws {
+        #expect(throws: Never.self) { try TestModel.multiple.plist }
+    }
+}
+
+#if BCFileHelper
+
+// Simple helper for FileHelper tests
+extension URL {
+    func delete() { try? FileManager.default.removeItem(at: self) }
+}
+
+@Suite("JSON File Access", .serialized)
+struct BCJSONFileTests {
+    static let datapath = URL(fileURLWithPath: "test.json")
+
+    @Suite("JSON Object")
+    struct BCJSONFileObjectTests {
+        @Test("Save JSON TestModel to file Provider")
+        func saveJSONUsingProvider() throws {
+            #expect(throws: Never.self) { try TestModel.single.write(json: datapath, using: .base) }
+        }
+        
+        @Test("Read JSON TestModel from file Provider")
+        func readJSONUsingProvider() throws {
+            defer { datapath.delete() }
+            #expect(try TestModel(json: datapath, using: .base) == .single)
+        }
+        
+        @Test("Save JSON TestModel to file Default")
+        func saveJSONUsingDefault() throws {
+            #expect(throws: Never.self) { try TestModel.single.write(json: datapath) }
+        }
+        
+        @Test("Read JSON TestModel from file Default")
+        func readJSONUsingDefault() throws {
+            defer { datapath.delete() }
+            #expect(try TestModel(json: datapath) == .single)
+        }
+    }
+
+    @Suite("JSON Array")
+    struct BCJSONFileArrayTests {
+        @Test("Save JSON [TestModel] to file Default")
+        func saveJSONUsingDefault() throws {
+            #expect(throws: Never.self) { try TestModel.multiple.write(json: datapath) }
+        }
+
+        @Test("Read JSON [TestModel] from file Default")
+        func readJSONUsingDefault() throws {
+            defer { datapath.delete() }
+            #expect(try [TestModel](json: datapath) == TestModel.multiple)
+        }
+        
+        @Test("Save JSON [TestModel] to file Provider")
+        func saveJSONUsingProvider() throws {
+            #expect(throws: Never.self) { try TestModel.multiple.write(json: datapath, using: .pretty) }
+        }
+
+        @Test("Read JSON [TestModel] from file Provider")
+        func readJSONUsingProvider() throws {
+            defer { datapath.delete() }
+            #expect(try [TestModel](json: datapath, using: .base) == TestModel.multiple)
         }
     }
 }
+
+@Suite("plist File Access", .serialized)
+struct BCPlistFileTests {
+    static let datapath = URL(fileURLWithPath: "test.plist")
+
+    @Suite("plist Object")
+    struct BCJSONFileObjectTests {
+        @Test("Save plist TestModel to file Provider")
+        func savePlistUsingProvider() throws {
+            #expect(throws: Never.self) { try TestModel.single.write(plist: datapath, using: .xml) }
+        }
+
+        @Test("Read plist TestModel from file Provider")
+        func readPlistUsingProvider() throws {
+            defer { datapath.delete() }
+            #expect(try TestModel(plist: datapath, using: .base) == .single)
+        }
+        
+        @Test("Save plist TestModel to file Default")
+        func savePlistUsingDefault() throws {
+            #expect(throws: Never.self) { try TestModel.single.write(plist: datapath) }
+        }
+
+        @Test("Read plist TestModel from file Default")
+        func readPlistUsingDefault() throws {
+            defer { datapath.delete() }
+            #expect(try TestModel(plist: datapath) == .single)
+        }
+    }
+
+    @Suite("Save plist Array")
+    struct BCPlistFileArrayTests {
+        @Test("Save plist [TestModel] to file Provider")
+        func savePlistArrayUsingProvider() throws {
+            #expect(throws: Never.self) { try TestModel.multiple.write(plist: datapath, using: .xml) }
+        }
+
+        @Test("Read plist [TestModel] from file Provider")
+        func readPlistArrayUsingProvider() throws {
+            defer { datapath.delete() }
+            #expect(try [TestModel](plist: datapath, using: .base) == TestModel.multiple)
+        }
+        
+        @Test("Save plist [TestModel] to file Default")
+        func savePlistArrayUsingDefault() throws {
+            #expect(throws: Never.self) { try TestModel.multiple.write(plist: datapath) }
+        }
+
+        @Test("Read plist [TestModel] from file Default")
+        func readPlistArrayUsingDefault() throws {
+            defer { datapath.delete() }
+            #expect(try [TestModel](plist: datapath) == TestModel.multiple)
+        }
+    }
+}
+
+#endif // BCFileHelper

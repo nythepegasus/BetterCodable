@@ -1,314 +1,352 @@
 
 @_exported import struct Foundation.Data
-@_exported import class Foundation.JSONDecoder
 @_exported import class Foundation.JSONEncoder
-@_exported import class Foundation.PropertyListDecoder
+@_exported import class Foundation.JSONDecoder
 @_exported import class Foundation.PropertyListEncoder
+@_exported import class Foundation.PropertyListDecoder
 
+// Protocols stolen from Combine but match the current Foundation implementations
+// (TopLevelEncoder/TopLevelDecoder are a bit too generic to be useful for this currently)
 
-// MARK: Codable Data JSON extensions
-
-/// Protocol for adding helpers to Decodable for JSON data.
-public protocol JSONDecodable: Decodable {
-    /// The default JSONDecoder to use for this type.
-    static var jsonDecoder: JSONDecoder { get }
+/// TopLevelDecoder from Combine stolen for BetterCodable purposes
+/// Defines a common interface for Decodable types
+public protocol BCDecoder {
+    func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T
 }
 
-public extension JSONDecodable {
-    /// Helper init to use default JSONDecoder on passed json Data.
-    init(json data: Data) throws { self = try Self.jsonDecoder.decode(Self.self, from: data) }
+/// TopLevelEncoder from Combine stolen for BetterCodable purposes
+/// Defines a common interface for Encodable types
+public protocol BCEncoder {
+    func encode<T: Encodable>(_ value: T) throws -> Data
 }
 
-public extension Array where Element: JSONDecodable {
-    /// Helper init to use default JSONDecoder of Array Element on passed json Data.
-    init(json data: Data) throws { self = try Element.jsonDecoder.decode(Self.self, from: data) }
+/// A protocol for defining JSONDecoder types
+public protocol BCJSONDecoderProtocol: BCDecoder {}
+/// A protocol for defining JSONEncoder types
+public protocol BCJSONEncoderProtocol: BCEncoder {}
+
+extension JSONDecoder: BCJSONDecoderProtocol {}
+extension JSONEncoder: BCJSONEncoderProtocol {}
+
+/// A protocol for defining JSONDecoder provider types
+public protocol BCJSONDecoderProvider {
+    /// The type of JSONDecoder this provider returns
+    associatedtype BCJSONDecoder: BCJSONDecoderProtocol
+    /// The selected BCJSONDecoder to be used for decoding
+    var jsonDecoder: BCJSONDecoder { get }
 }
 
-/// Helper Protocol to use multiple JSONDecoders in a type safe way.
-public protocol JSONDecoders: CaseIterable {
-    /// Chosen JSONDecoder
-    /// Should be a computed property of an enum type
-    var decoder: JSONDecoder { get }
+public extension BCJSONDecoderProvider {
+    /// Helper function to use a specific BCJSONDecoder directly to decode data
+    func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        try jsonDecoder.decode(type, from: data)
+    }
 }
 
-/// Protocol for adding helpers to Decodable for JSON data using multiple JSONDecoders in a type safe way.
-public protocol MultiJSONDecodable: Decodable {
-    associatedtype Decoders: JSONDecoders
+public protocol BCJSONEncoderProvider {
+    associatedtype BCJSONEncoder: BCJSONEncoderProtocol
+    var jsonEncoder: BCJSONEncoder { get }
 }
 
-/// Protocol for adding helpers to Decodable for JSON data using multiple JSONDecoders with a default in a type safe way.
-public protocol MultiDefaultJSONDecodable: MultiJSONDecodable & JSONDecodable {}
-
-public extension MultiJSONDecodable {
-    /// Helper init to use chosen JSONDecoder of this type's Decoders on passed json Data.
-    init(json data: Data, using: Decoders) throws { self = try using.decoder.decode(Self.self, from: data) }
+public extension BCJSONEncoderProvider {
+    func encode<T: Encodable>(_ value: T) throws -> Data {
+        try jsonEncoder.encode(value)
+    }
 }
 
-public extension Array where Element: MultiJSONDecodable {
-    /// Helper init to use chosen JSONDecoder of Array Element type's Decoders on passed json Data.
-    init(json data: Data, using: Element.Decoders) throws { self = try using.decoder.decode(Self.self, from: data) }   
+/// Helper protocol for both BCJSONDecoderProvider and BCJSONEncoderProvider
+public protocol BCJSONCoderProvider: BCJSONDecoderProvider & BCJSONEncoderProvider {}
+
+public protocol BCJSONDecodable<JSONDecoders>: Decodable {
+    associatedtype JSONDecoders: BCJSONDecoderProvider
 }
 
-/// Protocol for adding helpers to Encodable for JSON data.
-public protocol JSONEncodable: Encodable {
-    /// The default JSONEncoder to use for this type.
-    static var jsonEncoder: JSONEncoder { get }
+public extension BCJSONDecodable {
+    init(json data: Data, using: JSONDecoders) throws {
+        self = try using.decode(Self.self, from: data)
+    }
 }
 
-/// Protocol for adding helpers to Encodable for JSON data.
-public extension JSONEncodable {
-    /// The current object as Data returned by this type's default JSONEncoder.
-    var json: Data { get throws { try Self.jsonEncoder.encode(self) } }
+public extension Sequence where Self: Decodable, Element: BCJSONDecodable {
+    init(json data: Data, using: Element.JSONDecoders) throws {
+        self = try using.decode(Self.self, from: data)
+    }
 }
 
-public extension Array where Element: JSONEncodable {
-    /// The current object as Data returned by the Array Element type's default JSONEncoder.
-    var json: Data { get throws { try Element.jsonEncoder.encode(self) } }
+public protocol BCJSONEncodable<JSONEncoders>: Encodable {
+    associatedtype JSONEncoders: BCJSONEncoderProvider
 }
 
-/// Helper Protocol to use multiple JSONEncoders in a type safe way.
-public protocol JSONEncoders: CaseIterable {
-    /// Chosen JSONEncoder
-    /// Should be a computed property of an enum type
-    var encoder: JSONEncoder { get }
+public extension BCJSONEncodable {
+    func json(_ using: JSONEncoders) throws -> Data {
+        try using.encode(self)
+    }
 }
 
-/// Protocol for adding helpers to Encodable for JSON data using multiple JSONEncoders in a type safe way.
-public protocol MultiJSONEncodable: Encodable {
-    associatedtype Encoders: JSONEncoders
+public extension Sequence where Self: Encodable, Element: BCJSONEncodable {
+    func json(_ using: Element.JSONEncoders) throws -> Data {
+        try using.encode(self)
+    }
 }
 
-/// Protocol for adding helpers to Decodable for JSON data using multiple JSONDecoders with a default in a type safe way.
-public protocol MultiDefaultJSONEncodable: MultiJSONEncodable & JSONEncodable {}
+public protocol BCJSONCodable: Codable, BCJSONEncodable & BCJSONDecodable {}
 
-public extension MultiJSONEncodable {
-    /// The current object as Data returned by this type's Encoders chosen JSONEncoder.
-    func json(using: Encoders) throws -> Data { try using.encoder.encode(self) }
+// Single de/encoder setup
+
+public protocol BCDefaultJSONDecodable: Decodable {
+    static var jsonDefaultDecoder: BCJSONDecoderProtocol { get }
 }
 
-public extension Array where Element: MultiJSONEncodable {
-    /// The current object as Data returned by the Array Element type's Encoders chosen JSONEncoder.
-    func json(using: Element.Encoders) throws -> Data { try using.encoder.encode(self) }
+public extension BCDefaultJSONDecodable {
+    init(json data: Data) throws {
+        self = try Self.jsonDefaultDecoder.decode(Self.self, from: data)
+    }
 }
 
-/// Protocol for adding helpers to Codable for JSON data.
-public protocol JSONCodable: Codable, JSONEncodable & JSONDecodable {}
-public protocol MultiJSONCodable: MultiJSONEncodable & MultiJSONDecodable {}
-public protocol MultiDefaultJSONCodable: MultiDefaultJSONEncodable & MultiDefaultJSONDecodable {}
-
-// MARK: Codable Data plist extensions
-
-/// Protocol for adding helpers to Decodable for plist data.
-public protocol PlistDecodable: Decodable {
-    /// The default PropertyListDecoder to use for this type.
-    static var plistDecoder: PropertyListDecoder { get }
+public extension Sequence where Self: Decodable, Element: BCDefaultJSONDecodable {
+    init(json data: Data) throws {
+        self = try Element.jsonDefaultDecoder.decode(Self.self, from: data)
+    }
 }
 
-public extension PlistDecodable {
-    /// Helper init to use default PropertyListDecoder on passed plist Data.
-    init(plist data: Data) throws { self = try Self.plistDecoder.decode(Self.self, from: data) }
+public protocol BCDefaultJSONEncodable: Encodable {
+    static var jsonDefaultEncoder: BCJSONEncoderProtocol { get }
 }
 
-public extension Array where Element: PlistDecodable {
-    /// Helper init to use Array Element type's default PropertyListDecoder on passed plist Data.
-    init(plist data: Data) throws { self = try Element.plistDecoder.decode(Self.self, from: data) }
+public extension BCDefaultJSONEncodable {
+    var json: Data {
+        get throws {
+            try Self.jsonDefaultEncoder.encode(self)
+        }
+    }
 }
 
-/// Helper Protocol to use multiple PropertyListDecoders in a type safe way.
-public protocol PlistDecoders: CaseIterable {
-    /// Chosen PropertyListDecoder
-    /// Should be a computed property of an enum type
-    var decoder: PropertyListDecoder { get }
+public extension Sequence where Self: Encodable, Element: BCDefaultJSONEncodable {
+    var json: Data {
+        get throws {
+            try Element.jsonDefaultEncoder.encode(self)
+        }
+    }
 }
 
-/// Protocol for adding helpers to Decodable for plist data using multiple PropertyListDecoders in a type safe way.
-public protocol MultiPlistDecodable: Decodable {
-    associatedtype Decoders: PlistDecoders
+public protocol BCDefaultJSONCodable: Codable, BCDefaultJSONEncodable & BCDefaultJSONDecodable {}
+
+// MARK: plist de/encoders
+
+///
+public protocol BCPlistDecoderProtocol: BCDecoder {}
+///
+public protocol BCPlistEncoderProtocol: BCEncoder {}
+
+extension PropertyListDecoder: BCPlistDecoderProtocol {}
+extension PropertyListEncoder: BCPlistEncoderProtocol {}
+
+///
+public protocol BCPlistDecoderProvider {
+    ///
+    associatedtype BCPlistDecoder: BCPlistDecoderProtocol
+    ///
+    var plistDecoder: BCPlistDecoder { get }
 }
 
-/// Protocol for adding helpers to Decodable for plist data using multiple PropertyListDecoders with a default in a type safe way.
-public protocol MultiDefaultPlistDecodable: MultiPlistDecodable & PlistDecodable {}
-
-public extension MultiPlistDecodable {
-    /// Helper init to use chosen PlistDecoder of Decoders on passed Plist Data.
-    init(plist data: Data, using: Decoders) throws { self = try using.decoder.decode(Self.self, from: data) }
+public extension BCPlistDecoderProvider {
+    ///
+    func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        try plistDecoder.decode(type, from: data)
+    }
 }
 
-public extension Array where Element: MultiPlistDecodable {
-    /// Helper init to use chosen PlistDecoder of Array Element Decoders on passed Plist Data.
-    init(plist data: Data, using: Element.Decoders) throws { self = try using.decoder.decode(Self.self, from: data) }   
+public protocol BCPlistEncoderProvider {
+    associatedtype BCPlistEncoder: BCPlistEncoderProtocol
+    var plistEncoder: BCPlistEncoder { get }
 }
 
-/// Protocol for adding helpers to Encodable for plist data.
-public protocol PlistEncodable: Encodable {
-    /// The default PropertyListEncoder to use for this type.
-    static var plistEncoder: PropertyListEncoder { get }
+public extension BCPlistEncoderProvider {
+    func encode<T: Encodable>(_ value: T) throws -> Data {
+        try plistEncoder.encode(value)
+    }
 }
 
-public extension PlistEncodable {
-    /// The current object as Data returned by this type's default PropertyListEncoder.
-    var plist: Data { get throws { try Self.plistEncoder.encode(self) } }
+///
+public protocol BCPlistCoderProvider: BCPlistDecoderProvider & BCPlistEncoderProvider {}
+
+public protocol BCPlistDecodable<PlistDecoders>: Decodable {
+    associatedtype PlistDecoders: BCPlistDecoderProvider
 }
 
-public extension Array where Element: PlistEncodable {
-    /// The current object as Data returned by the Array Element type's default PropertyListEncoder.
-    var plist: Data { get throws { try Element.plistEncoder.encode(self) } }
+public extension BCPlistDecodable {
+    init(plist data: Data, using: PlistDecoders) throws {
+        self = try using.decode(Self.self, from: data)
+    }
 }
 
-/// Helper Protocol to use multiple PropertyListEncoders in a type safe way.
-public protocol PlistEncoders: CaseIterable {
-    /// Chosen PropertyListEncoder
-    /// Should be a computed property of an enum type
-    var encoder: PropertyListEncoder { get }
+public extension Sequence where Self: Decodable, Element: BCPlistDecodable {
+    init(plist data: Data, using: Element.PlistDecoders) throws {
+        self = try using.decode(Self.self, from: data)
+    }
 }
 
-/// Protocol for adding helpers to Decodable for plist data using multiple PropertyListEncoders in a type safe way.
-public protocol MultiPlistEncodable: Encodable {
-    associatedtype Encoders: PlistEncoders
+public protocol BCPlistEncodable<PlistEncoders>: Encodable {
+    associatedtype PlistEncoders: BCPlistEncoderProvider
 }
 
-/// Protocol for adding helpers to Decodable for plist data using multiple PropertyListEncoders with a default in a type safe way.
-public protocol MultiDefaultPlistEncodable: MultiPlistEncodable & PlistEncodable {}
-
-public extension MultiPlistEncodable {
-    /// Helper func to return the current object as Data returned by the type's Encoders chosen PropertyListEncoder.
-    func json(using: Encoders) throws -> Data { try using.encoder.encode(self) }
+public extension BCPlistEncodable {
+    func plist(_ using: PlistEncoders) throws -> Data {
+        try using.encode(self)
+    }
 }
 
-public extension Array where Element: MultiPlistEncodable {
-    /// Helper func to return the current object as Data returned by the Array Element type's Encoders chosen PropertyListEncoder.
-    func json(using: Element.Encoders) throws -> Data { try using.encoder.encode(self) }
+public extension Sequence where Self: Encodable, Element: BCPlistEncodable {
+    func plist(_ using: Element.PlistEncoders) throws -> Data {
+        try using.encode(self)
+    }
 }
 
-/// Protocol for adding helpers to Codable for plist data.
-public protocol PlistCodable: Codable, PlistEncodable & PlistDecodable {}
-public protocol MultiPlistCodable: MultiPlistEncodable & MultiPlistDecodable {}
-public protocol MultiDefaultPlistCodable: MultiDefaultPlistEncodable & MultiDefaultPlistDecodable {}
+public protocol BCPlistCodable: Codable, BCPlistDecodable & BCPlistEncodable {}
 
-// MARK: Codable protocols for JSON and plist Data
+public protocol BCCodable: Codable, BCJSONCodable & BCPlistCodable {}
 
-/// Protocol for adding helpers to Encodable for JSON and plist Data.
-public protocol JPEncodable: JSONEncodable & PlistEncodable {}
-public protocol MJPEncodable: MultiJSONEncodable & MultiPlistEncodable {}
-public protocol MDJPEncodable: MultiDefaultJSONEncodable & MultiDefaultPlistEncodable {}
-/// Protocol for adding helpers to Decodable for JSON and plist Data.
-public protocol JPDecodable: JSONDecodable & PlistDecodable {}
-public protocol MJPDecodable: MultiJSONDecodable & MultiPlistDecodable {}
-public protocol MDJPDecodable: MultiDefaultJSONDecodable & MultiDefaultPlistDecodable {}
-/// Protocol for adding helpers to Codable for JSON and plist Data.
-public protocol JPCodable: JPEncodable & JPDecodable {}
-public protocol MJPCodable: MJPEncodable & MJPDecodable {}
-public protocol MDJPCodable: MDJPEncodable & MDJPDecodable {}
+// Single de/encoder setup
+
+public protocol BCDefaultPlistDecodable: Decodable {
+    static var plistDefaultDecoder: BCPlistDecoderProtocol { get }
+}
+
+public extension BCDefaultPlistDecodable {
+    init(plist data: Data) throws {
+        self = try Self.plistDefaultDecoder.decode(Self.self, from: data)
+    }
+}
+
+public extension Sequence where Self: Decodable, Element: BCDefaultPlistDecodable {
+    init(plist data: Data) throws {
+        self = try Element.plistDefaultDecoder.decode(Self.self, from: data)
+    }
+}
+
+public protocol BCDefaultPlistEncodable: Encodable {
+    static var plistDefaultEncoder: BCPlistEncoderProtocol { get }
+}
+
+public extension BCDefaultPlistEncodable {
+    var plist: Data {
+        get throws {
+            try Self.plistDefaultEncoder.encode(self)
+        }
+    }
+}
+
+public extension Sequence where Self: Encodable, Element: BCDefaultPlistEncodable {
+    var plist: Data {
+        get throws {
+            try Element.plistDefaultEncoder.encode(self)
+        }
+    }
+}
+
+public protocol BCDefaultPlistCodable: Codable, BCDefaultPlistDecodable & BCDefaultPlistEncodable {}
+
+public protocol BCDCodable: Codable, BCJSONCodable & BCPlistCodable, BCDefaultJSONCodable & BCDefaultPlistCodable {}
 
 #if BCFileHelper
 
 @_exported import struct Foundation.URL
 @_exported import class Foundation.FileManager
 
-public extension JSONDecodable {
-    /// Read Data from URL json and attempt to decode using type's default JSONDecoder.
-    init?(json path: URL) throws {
-        guard let data = FileManager.default.contents(atPath: path.path) else { return nil }
-        self = try Self.init(json: data)
+public extension BCJSONDecodable {
+    init(json path: URL, using: JSONDecoders) throws {
+        self = try using.decode(Self.self, from: Data(contentsOf: path))
     }
 }
 
-public extension Array where Element: JSONDecodable {
-    /// Read Data from URL json and attempt to decode using Array Element type's default JSONDecoder.
-    init?(json path: URL) throws {
-        guard let data = FileManager.default.contents(atPath: path.path) else { return nil }
-        self = try Self.init(json: data)
+public extension Sequence where Self: Decodable, Element: BCJSONDecodable {
+    init(json path: URL, using: Element.JSONDecoders) throws {
+        self = try using.decode(Self.self, from: Data(contentsOf: path))
     }
 }
 
-public extension MultiJSONDecodable {
-    /// Read Data from URL json and attempt to decode using type's Decoders chosen JSONDecoder.
-    init?(json path: URL, using decoder: Decoders) throws {
-        guard let data = FileManager.default.contents(atPath: path.path) else { return nil }
-        self = try Self.init(json: data, using: decoder)
+public extension BCJSONEncodable {
+    func write(json path: URL, using: JSONEncoders) throws {
+        try using.encode(self).write(to: path)
     }
 }
 
-public extension Array where Element: MultiJSONDecodable {
-    /// Read Data from URL json and attempt to decode using Array Element type's Decoders chosen JSONDecoder.
-    init?(json path: URL, using decoder: Element.Decoders) throws {
-        guard let data = FileManager.default.contents(atPath: path.path) else { return nil }
-        self = try Self.init(json: data, using: decoder)
+public extension Sequence where Self: Encodable, Element: BCJSONEncodable {
+    func write(json path: URL, using: Element.JSONEncoders) throws {
+        try using.encode(self).write(to: path)
     }
 }
 
-
-public extension JSONEncodable {
-    /// Attempt to write type as encoded Data to URL json using the type's default JSONEncoder.
-    func write(json path: URL) throws { try json.write(to: path) }
-}
-
-public extension Array where Element: JSONEncodable {
-    /// Attempt to write type as encoded Data to URL json using the Array Element type's default JSONEncoder.
-    func write(json path: URL) throws { try json.write(to: path) }
-}
-
-public extension MultiJSONEncodable {
-    /// Attempt to write type as encoded Data to URL json using the type's Encoders chosen JSONEncoder.
-    func write(json path: URL, using: Encoders) throws { try using.encoder.encode(self).write(to: path) }
-}
-
-public extension Array where Element: MultiJSONEncodable {
-    /// Attempt to write type as encoded Data to URL json using the Array Element type's Encoders chosen JSONEncoder.
-    func write(json path: URL, using: Element.Encoders) throws { try using.encoder.encode(self).write(to: path) }
-}
-
-public extension PlistDecodable {
-    /// Read Data from URL plist and attempt to decode using type's default PropertyListDecoder.
-    init?(plist path: URL) throws {
-        guard let data = FileManager.default.contents(atPath: path.path) else { return nil }
-        self = try Self.init(plist: data)
+public extension BCDefaultJSONDecodable {
+    init(json path: URL) throws {
+        self = try Self.jsonDefaultDecoder.decode(Self.self, from: Data(contentsOf: path))
     }
 }
 
-public extension Array where Element: PlistDecodable {
-    /// Read Data from URL plist and attempt to decode using Array Element type's default PropertyListDecoder.
-    init?(plist path: URL) throws {
-        guard let data = FileManager.default.contents(atPath: path.path) else { return nil }
-        self = try Self.init(plist: data)
+public extension Sequence where Self: Decodable, Element: BCDefaultJSONDecodable {
+    init(json path: URL) throws {
+        self = try Element.jsonDefaultDecoder.decode(Self.self, from: Data(contentsOf: path))
     }
 }
 
-public extension MultiPlistDecodable {
-    /// Read Data from URL plist and attempt to decode using type's Decoders chosen JSONDecoder.
-    init?(plist path: URL, using decoder: Decoders) throws {
-        guard let data = FileManager.default.contents(atPath: path.path) else { return nil }
-        self = try Self.init(plist: data, using: decoder)
+public extension BCDefaultJSONEncodable {
+    func write(json path: URL) throws {
+        try Self.jsonDefaultEncoder.encode(self).write(to: path)
     }
 }
 
-public extension Array where Element: MultiPlistDecodable {
-    /// Read Data from URL plist and attempt to decode using Array Element type's Decoders chosen PropertyListDecoder.
-    init?(plist path: URL, using decoder: Element.Decoders) throws {
-        guard let data = FileManager.default.contents(atPath: path.path) else { return nil }
-        self = try Self.init(plist: data, using: decoder)
+public extension Sequence where Self: Encodable, Element: BCDefaultJSONEncodable {
+    func write(json path: URL) throws {
+        try Element.jsonDefaultEncoder.encode(self).write(to: path)
     }
 }
 
-public extension PlistEncodable {
-    /// Attempt to write type as encoded Data to URL plist using the type's default PropertyListEncoder.
-    func write(plist path: URL) throws { try plist.write(to: path) }
+public extension BCPlistDecodable {
+    init(plist path: URL, using: PlistDecoders) throws {
+        self = try using.decode(Self.self, from: Data(contentsOf: path))
+    }
 }
 
-public extension Array where Element: PlistEncodable {
-    /// Attempt to write type as encoded Data to URL plist using the Array Element type's default PropertyListEncoder.
-    func write(plist path: URL) throws { try plist.write(to: path) }
+public extension Sequence where Self: Decodable, Element: BCPlistDecodable {
+    init(plist path: URL, using: Element.PlistDecoders) throws {
+        self = try using.decode(Self.self, from: Data(contentsOf: path))
+    }
 }
 
-public extension MultiPlistEncodable {
-    /// Attempt to write type as encoded Data to URL plist using the type's Encoders chosen PropertyListEncoder.
-    func write(plist path: URL, using: Encoders) throws { try using.encoder.encode(self).write(to: path) }
+public extension BCPlistEncodable {
+    func write(plist path: URL, using: PlistEncoders) throws {
+        try using.encode(self).write(to: path)
+    }
 }
 
-public extension Array where Element: MultiPlistEncodable {
-    /// Attempt to write type as encoded Data to URL plist using the Array Element type's Encoders chosen PropertyListEncoder.
-    func write(plist path: URL, using: Element.Encoders) throws { try using.encoder.encode(self).write(to: path) }
+public extension Sequence where Self: Encodable, Element: BCPlistEncodable {
+    func write(plist path: URL, using: Element.PlistEncoders) throws {
+        try using.encode(self).write(to: path)
+    }
+}
+    
+public extension BCDefaultPlistDecodable {
+    init(plist path: URL) throws {
+        self = try Self.plistDefaultDecoder.decode(Self.self, from: Data(contentsOf: path))
+    }
 }
 
-#endif
+public extension Sequence where Self: Decodable, Element: BCDefaultPlistDecodable {
+    init(plist path: URL) throws {
+        self = try Element.plistDefaultDecoder.decode(Self.self, from: Data(contentsOf: path))
+    }
+}
 
+public extension BCDefaultPlistEncodable {
+    func write(plist path: URL) throws {
+        try Self.plistDefaultEncoder.encode(self).write(to: path)
+    }
+}
+
+public extension Sequence where Self: Encodable, Element: BCDefaultPlistEncodable {
+    func write(plist path: URL) throws {
+        try Element.plistDefaultEncoder.encode(self).write(to: path)
+    }
+}
+
+#endif // BCFileHelper
