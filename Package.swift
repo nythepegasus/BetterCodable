@@ -14,12 +14,10 @@ let package = Package(
     products: [
         .library(name: "BetterCodable", targets: ["BetterCodable"]),
     ],
-    traits: [
-        "BCFileHelper",
-        .default(enabledTraits: ["BCFileHelper"]),
-    ],
     targets: [
         .target(name: "BetterCodable"),
-        .testTarget(name: "BetterCodableTests", dependencies: ["BetterCodable"]),
+        .target(name: "BCFileHelper", dependencies: ["BetterCodable"]),
+        .target(name: "BCURLSessionHelper", dependencies: ["BetterCodable"]),
+        .testTarget(name: "BetterCodableTests", dependencies: ["BetterCodable", "BCFileHelper", "BCURLSessionHelper"]),
     ]
 )

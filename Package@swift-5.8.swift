@@ -15,6 +15,8 @@ let package = Package(
     ],
     targets: [
         .target(name: "BetterCodable"),
-        .testTarget(name: "BetterCodableTests", dependencies: ["BetterCodable"]),
+        .target(name: "BCFileHelper", dependencies: ["BetterCodable"]),
+        .target(name: "BCURLSessionHelper", dependencies: ["BetterCodable"]),
+        .testTarget(name: "BetterCodableTests", dependencies: ["BetterCodable", "BCFileHelper", "BCURLSessionHelper"]),
     ]
 )

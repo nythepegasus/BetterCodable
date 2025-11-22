@@ -1,5 +1,7 @@
 import Testing
 @testable import BetterCodable
+@testable import BCFileHelper
+@testable import BCURLSessionHelper
 
 public enum BasicJSONDecoders: CaseIterable, BCJSONDecoderProvider {
     case base
@@ -59,12 +61,8 @@ public enum BasicPlistEncoders: CaseIterable, BCPlistEncoderProvider {
 extension BCDCodable {
     public typealias JSONDecoders = BasicJSONDecoders
     public typealias JSONEncoders = BasicJSONEncoders
-    public static var jsonDefaultDecoder: any BCJSONDecoderProtocol { JSONDecoder() }
-    public static var jsonDefaultEncoder: any BCJSONEncoderProtocol { JSONEncoder() }
     public typealias PlistDecoders = BasicPlistDecoders
     public typealias PlistEncoders = BasicPlistEncoders
-    public static var plistDefaultDecoder: any BCPlistDecoderProtocol { PropertyListDecoder() }
-    public static var plistDefaultEncoder: any BCPlistEncoderProtocol { PropertyListEncoder() }
 }
 
 /// Simple TestModel to test encoding/decoding test data
@@ -222,8 +220,6 @@ struct BCPlistEncodaleTests {
     }
 }
 
-#if BCFileHelper
-
 // Simple helper for FileHelper tests
 extension URL {
     func delete() { try? FileManager.default.removeItem(at: self) }
@@ -339,4 +335,3 @@ struct BCPlistFileTests {
     }
 }
 
-#endif // BCFileHelper
