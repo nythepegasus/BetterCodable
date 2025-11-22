@@ -13,6 +13,8 @@ let package = Package(
     ],
     products: [
         .library(name: "BetterCodable", targets: ["BetterCodable"]),
+        .library(name: "BCFileHelper", targets: ["BCFileHelper"]),
+        .library(name: "BCURLSessionHelper", targets: ["BCURLSessionHelper"]),
     ],
     targets: [
         .target(name: "BetterCodable"),

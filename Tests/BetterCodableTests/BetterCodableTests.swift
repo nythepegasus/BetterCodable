@@ -34,12 +34,6 @@ public enum BasicJSONEncoders: CaseIterable, BCJSONEncoderProvider {
     }
 }
 
-public enum BasicPlistDecoders: CaseIterable, BCPlistDecoderProvider {
-    case base
-
-    public var plistDecoder: PropertyListDecoder { .init() }
-}
-
 public enum BasicPlistEncoders: CaseIterable, BCPlistEncoderProvider {
     case bin
     case xml
@@ -61,7 +55,6 @@ public enum BasicPlistEncoders: CaseIterable, BCPlistEncoderProvider {
 extension BCDCodable {
     public typealias JSONDecoders = BasicJSONDecoders
     public typealias JSONEncoders = BasicJSONEncoders
-    public typealias PlistDecoders = BasicPlistDecoders
     public typealias PlistEncoders = BasicPlistEncoders
 }
 

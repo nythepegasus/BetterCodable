@@ -1,7 +1,7 @@
 
 @_exported import struct Foundation.Data
-@_exported import class Foundation.JSONEncoder
 @_exported import class Foundation.JSONDecoder
+@_exported import class Foundation.JSONEncoder
 @_exported import class Foundation.PropertyListEncoder
 @_exported import class Foundation.PropertyListDecoder
 
